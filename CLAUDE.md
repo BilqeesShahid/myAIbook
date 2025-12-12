@@ -208,3 +208,10 @@ Wait for consent; never auto-create ADRs. Group related decisions (stacks, authe
 
 ## Code Standards
 See `.specify/memory/constitution.md` for code quality, testing, performance, security, and architecture principles.
+
+## Active Technologies
+- Python 3.11, JavaScript/TypeScript for frontend + FastAPI, Qdrant, Google Generative AI SDK (for Gemini), ChatKit, OpenAI Agents SDK, Pydantic, Markdown processing libraries (001-rag-chatbot-agents)
+- Qdrant Cloud Free Tier for vector embeddings, local file system for source content (docs folder) (001-rag-chatbot-agents)
+
+## Recent Changes
+- 001-rag-chatbot-agents: Added Python 3.11, JavaScript/TypeScript for frontend + FastAPI, Qdrant, Google Generative AI SDK (for Gemini), ChatKit, OpenAI Agents SDK, Pydantic, Markdown processing libraries

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python test_improvements.py)",
+      "Bash(dir \"F:\\speckit-hackathon\\frontend\" /s)",
+      "Bash(dir \"src\\theme\\Navbar.js\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

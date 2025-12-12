@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "functions": {
+    "src/api/main.py": {
+      "runtime": "python3.11",
+      "maxDuration": 20
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/api/main.py"
+    }
+  ]
+}

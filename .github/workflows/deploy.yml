@@ -3,16 +3,21 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches:
-      - main # Or your default branch like 'master' or '001-robotics-book'
+      - main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   deploy:
-    name: Deploy
+    name: Build Site
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Not needed if lastUpdated and gitAuthors are not used
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -25,7 +30,6 @@ jobs:
         with:
           path: ./build
 
-  # Deployment job
   deploy-pages:
     name: Deploy to GitHub Pages
     environment:

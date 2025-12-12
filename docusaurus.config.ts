@@ -10,9 +10,10 @@ const config: Config = {
   favicon: 'img/favicon.ico',
 
   // Set the production url of your site here
-url: 'https://my-ai-book-ten.vercel.app', // your Vercel URL
-// Set the /<baseUrl>/ pathname under which your site is served
-baseUrl: '/', // root path for Vercel
+  url: 'https://my-ai-book-ten.vercel.app', // your Vercel URL
+  // Set the /<baseUrl>/ pathname under which your site is served
+  baseUrl: '/', // root path for Vercel
+  
 
 
   // GitHub pages deployment config.
@@ -86,6 +87,8 @@ baseUrl: '/', // root path for Vercel
           label: 'Learn',
         },
         {to: '/blog', label: 'Blog', position: 'left'},
+        {to: '/signup', label: 'Sign Up', position: 'right', id: 'signup-link'},
+        {to: '/signin', label: 'Sign In', position: 'right', id: 'signin-link'},
         {
           href: 'https://github.com/BilqeesShahid/myAIbook',
           label: 'GitHub',

@@ -36,7 +36,10 @@ Use reliable sources: research papers, official SDK documentation, technical man
 - **Readability:** Maintain Flesch-Kincaid grade 10–12 level for technical content.
 - **Diagram Accuracy:** All diagrams (robot kinematics, URDF, VLA workflows, sensor setups) MUST reflect real-world robotics and physics principles.
 - **Code Validation:** All ROS2, Gazebo, and Isaac code snippets MUST be syntactically correct, executable, and align with described functionality.
-- **Interactive Content:** RAG chatbot and personalization modules MUST accurately retrieve or manipulate content based on the book’s sections.
+- **Interactive Content:** RAG chatbot and personalization modules MUST accurately retrieve or manipulate content based on the book's sections.
+- **User Authentication:** User accounts MUST be securely managed through Better Auth with proper validation of user background information.
+- **Personalization:** Content personalization MUST adapt to user's software and hardware background as provided during signup.
+- **Translation:** Urdu translation feature MUST preserve technical accuracy while making content accessible to Urdu-speaking users.
 
 ### Structural Rules
 - **Modular Chapters:** Divide book into modules corresponding to course structure:
@@ -91,9 +94,26 @@ Use reliable sources: research papers, official SDK documentation, technical man
 - consistency-and-coherence-auditor/SKILL.md
 - RAG-master-skill/SKILL.md
 
+## Authentication and Personalization Guidelines
+
+### User Registration
+- **Background Collection:** Signup flow MUST collect user's software and hardware experience levels through structured questionnaire.
+- **Better Auth Integration:** User authentication MUST use Better Auth for secure, standardized account management.
+- **Profile Validation:** User background information MUST be validated and stored securely for personalization purposes.
+
+### Personalization Features
+- **Chapter Personalization:** Each chapter MUST provide a "Personalize Content" button that adapts content complexity based on user's background.
+- **Content Adaptation:** Personalization MUST adjust examples, explanations, and depth based on user's software/hardware experience.
+- **Translation Feature:** Each chapter MUST provide a "Translate to Urdu" button for multilingual accessibility.
+- **User Preference Storage:** Personalization settings MUST be stored per user and persist across sessions.
+
+### Security and Privacy
+- **Data Protection:** User background information and preferences MUST be stored securely and comply with privacy regulations.
+- **Authentication Security:** All authentication endpoints MUST implement proper security measures and rate limiting.
+
 ## Governance
 This constitution supersedes all other practices; Amendments require documentation, approval, and a migration plan. All PRs/reviews MUST verify compliance. Complexity MUST be justified.
 
-**Version**: 1.1.0 | **Ratified**: 2025-12-04 | **Last Amended**: 2025-12-04
+**Version**: 1.2.0 | **Ratified**: 2025-12-09 | **Last Amended**: 2025-12-09
 
 This constitution ensures **all chapters, agents, and skills are modular, reproducible, and compliant**, with **docs folder structure, sidebar routing, and clickable module routes fully enforced**.

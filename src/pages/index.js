@@ -19,7 +19,7 @@ const modulesData = [
       { name: "Chapter 5: Introduction to Robot Simulation", link: "/docs/simulation/chapter5" },
       { name: "Chapter 6: Gazebo for Robot Simulation", link: "/docs/simulation/chapter6" },
       { name: "Chapter 7: Defining and Spawning Robots in Gazebo", link: "/docs/simulation/chapter7" },
-      { name: "Chapter 8: Controlling Simulated Robots with ROS2", link: "/docs/simulation/chapter8" },
+      { name: "Chapter 8: Controlling Simulated Robots with ROS2(ros2_control)", link: "/docs/simulation/chapter8" },
     ],
   },
   {
