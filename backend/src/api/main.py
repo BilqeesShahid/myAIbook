@@ -5,15 +5,10 @@ import logging
 import os
 from dotenv import load_dotenv
 
- 
-
-# Absolute import
 from src.api.routes import ask, selected_text, translate
 
-# Load environment variables
 load_dotenv()
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -23,7 +18,6 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Shutting down RAG Chatbot API...")
 
-# Create application
 app = FastAPI(
     title="RAG Chatbot API",
     description="API for Retrieval-Augmented Generation chatbot system",
@@ -31,7 +25,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -40,19 +33,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
 app.include_router(ask.router, prefix="/api", tags=["ask"])
 app.include_router(selected_text.router, prefix="/api", tags=["selected-text"])
 app.include_router(translate.router, prefix="/api", tags=["translate"])
 
-# Root endpoint
 @app.get("/")
 async def root():
     return {"message": "RAG Chatbot API is running!"}
 
-# Health
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "environment": os.getenv("FASTAPI_ENV", "development")}
-
- 
+    return {"status": "healthy"}
