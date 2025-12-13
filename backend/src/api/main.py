@@ -5,7 +5,7 @@ import logging
 import os
 from dotenv import load_dotenv
 
-from mangum import Mangum  # IMPORTANT for Vercel
+ 
 
 # Absolute import
 from src.api.routes import ask, selected_text, translate
@@ -55,5 +55,4 @@ async def root():
 async def health_check():
     return {"status": "healthy", "environment": os.getenv("FASTAPI_ENV", "development")}
 
-# ⭐ REQUIRED FOR VERCEL
-handler = Mangum(app)
+ 
