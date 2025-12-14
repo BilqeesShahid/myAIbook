@@ -1,10 +1,5 @@
 fastapi
 uvicorn
 python-dotenv
-qdrant-client>=1.8.0
-openai-agents
-scikit-learn
-numpy
-requests
-pydantic
+
  
