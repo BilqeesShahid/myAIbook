@@ -5,18 +5,10 @@ import logging
 import os
 from dotenv import load_dotenv
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-from src.api.routes import ask, selected_text, translate
-=======
-from mangum import Mangum  # IMPORTANT for Vercel
-=======
  
->>>>>>> 40bdb1f (Save my local changes)
-
 # Absolute import
 from src.api.routes import ask
->>>>>>> f4f799c (Add latest backend changes)
+ 
 
 load_dotenv()
 
@@ -52,10 +44,6 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-<<<<<<< HEAD
-    return {"status": "healthy"}
-=======
     return {"status": "healthy", "environment": os.getenv("FASTAPI_ENV", "development")}
 
  
->>>>>>> 40bdb1f (Save my local changes)
