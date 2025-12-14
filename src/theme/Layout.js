@@ -140,31 +140,9 @@ export default function Layout(props) {
             cursor: pointer;
           }
 
-          /* Selected text ask button */
-          .selected-text-ask-btn {
-            position: fixed;
-            z-index: 10002;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            padding: 8px 12px;
-            font-size: 12px;
-            cursor: pointer;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-            display: none;
-            transform: translate(-50%, -100%);
-            white-space: nowrap;
-          }
-
-          .selected-text-ask-btn:hover {
-            background-color: #45a049;
-          }
         </style>
 
         <button class="chatbot-button" id="chatbotToggle">💬</button>
-
-        <div class="selected-text-ask-btn" id="selectedTextAskBtn">Ask</div>
 
         <div class="chatbot-modal" id="chatbotModal">
           <div class="chatbot-header">
@@ -196,89 +174,9 @@ export default function Layout(props) {
       const messagesContainer = document.getElementById('chatbotMessages');
       const input = document.getElementById('chatbotInput');
       const sendButton = document.getElementById('chatbotSend');
-      const selectedTextAskBtn = document.getElementById('selectedTextAskBtn');
 
-
-      // Store selected text
-      let selectedText = '';
-      // Store the selected text that was used to trigger auto-send
-      let autoSendSelectedText = null;
       // Session ID for chat persistence
       let sessionId = null;
-
-      if (selectedTextAskBtn) {
-        // Handle text selection
-        document.addEventListener('mouseup', function() {
-          const selection = window.getSelection();
-          const selectedTextContent = selection.toString().trim();
-
-          if (selectedTextContent) {
-            selectedText = selectedTextContent;
-
-            // Get selection position
-            try {
-              if (selection.rangeCount > 0) {
-                const range = selection.getRangeAt(0);
-                const rect = range.getBoundingClientRect();
-
-                // Position the ask button above the selection
-                selectedTextAskBtn.style.display = 'block';
-                selectedTextAskBtn.style.left = (rect.left + rect.width / 2) + 'px';
-                selectedTextAskBtn.style.top = rect.top + 'px';
-              } else {
-                selectedTextAskBtn.style.display = 'none';
-              }
-            } catch (e) {
-              console.error('Error getting selection range:', e);
-              // If no range is available (edge case), hide the button
-              selectedTextAskBtn.style.display = 'none';
-            }
-          } else {
-            selectedTextAskBtn.style.display = 'none';
-            selectedText = '';
-          }
-        });
-
-        // Hide the ask button when user clicks elsewhere
-        document.addEventListener('mousedown', function(e) {
-          if (!selectedTextAskBtn.contains(e.target) &&
-              !modal.contains(e.target) &&
-              !toggleButton.contains(e.target)) {
-            selectedTextAskBtn.style.display = 'none';
-          }
-        });
-
-        // Handle click on ask button
-        selectedTextAskBtn.addEventListener('click', function() {
-          if (selectedText) {
-            // Show the chatbot modal
-            modal.classList.add('active');
-
-            // Focus on input and add a prompt
-            // Store the selected text for auto-send processing
-            autoSendSelectedText = selectedText;
-
-            setTimeout(() => {
-              input.focus();
-              // Pre-fill with a summarization request for the selected text
-              input.value = `Summarize this text: "${selectedText}"`;
-              input.setSelectionRange(input.value.length, input.value.length); // Move cursor to end
-
-              // Session is already available, send the message immediately
-              setTimeout(() => {
-                const currentValue = input.value.trim();
-                if (currentValue) {
-                  sendMessage();
-                }
-              }, 100); // Small delay to ensure UI updates
-            }, 100);
-
-            // Hide the ask button
-            selectedTextAskBtn.style.display = 'none';
-            selectedText = '';
-          }
-        });
-      }
 
       if (toggleButton && modal && closeButton && messagesContainer && input && sendButton) {
         // Toggle chatbot
@@ -330,72 +228,20 @@ export default function Layout(props) {
             messagesContainer.appendChild(typingDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-            // Check if the message contains selected text context
-            // Prioritize the autoSendSelectedText if available (for auto-send from button click)
-            let isSelectedTextQuery = false;
-            let query = message;
-            let selectedText = null;
+            let requestBody = {
+              query: message,
+              session_id: sessionId,
+              language: 'en',
+              context_window: 5,
+            };
 
-            // First check if this is an auto-send from the "Ask" button
-            if (autoSendSelectedText) {
-              isSelectedTextQuery = true;
-              selectedText = autoSendSelectedText;
-              query = 'Summarize this text'; // Default query for summarization
-              // Clear the auto-send flag
-              autoSendSelectedText = null;
-            } else {
-              // Fallback to the original parsing method for manual input
-              isSelectedTextQuery = message.startsWith('About this text:') || message.startsWith('Summarize this text:');
-
-              if (isSelectedTextQuery) {
-                // Extract the selected text from the message (the text between the quotes)
-                const quoteStart = message.indexOf('"');
-                const quoteEnd = message.lastIndexOf('"');
-                if (quoteStart !== -1 && quoteEnd !== -1 && quoteEnd > quoteStart) {
-                  selectedText = message.substring(quoteStart + 1, quoteEnd);
-                  // Use the remaining text as query or ask for clarification
-                  let prefix = message.startsWith('About this text:') ? 'About this text:' : 'Summarize this text:';
-                  query = message.substring(0, quoteStart).replace(prefix, '').trim() +
-                          message.substring(quoteEnd + 1).trim();
-                  query = query.trim() || (message.startsWith('Summarize this text:') ? 'Summarize this text' : 'Can you explain this text?');
-                } else {
-                  isSelectedTextQuery = false; // Treat as regular query if no quotes found
-                }
-              }
-            }
-
-            let requestBody = {};
-            let response; // Declare response variable in the correct scope
-
-            if (isSelectedTextQuery && selectedText) {
-              requestBody = {
-                query: query,
-                selected_text: selectedText,
-                session_id: sessionId,
-                language: 'en',
-              };
-              response = await fetch(`${API_BASE_URL}/ask/selected-text`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody),
-              });
-            } else {
-              requestBody = {
-                query: message,
-                session_id: sessionId,
-                language: 'en',
-                context_window: 5,
-              };
-              response = await fetch(`${API_BASE_URL}/ask`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody),
-              });
-            }
+            let response = await fetch(`${API_BASE_URL}/ask`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody),
+            });
 
             // Remove typing indicator
             typingDiv.remove();

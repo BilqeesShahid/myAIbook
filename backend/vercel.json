@@ -3,7 +3,14 @@
   "builds": [
     {
       "src": "src/api/main.py",
+<<<<<<< HEAD
       "use": "@vercel/python"
+=======
+      "use": "@vercel/python",
+      "config": {
+        "runtime": "python3.11"
+      }
+>>>>>>> f4f799c (Add latest backend changes)
     }
   ],
   "routes": [

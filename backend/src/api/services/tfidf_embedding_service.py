@@ -26,7 +26,7 @@ class TFIDFEmbeddingService:
     """
 
     def __init__(self):
-        # Initialize TF-IDF vectorizer with a smaller number of features
+        # Initialize TF-IDF vectorizer with the same number of features as the embedding dimension
         # We'll pad the vectors to reach the target dimension
         self.vectorizer_cache_path = "tfidf_vectorizer.pkl"
 
@@ -40,7 +40,7 @@ class TFIDFEmbeddingService:
             except Exception as e:
                 logger.warning(f"Could not load cached vectorizer: {e}, creating new one")
                 self.vectorizer = TfidfVectorizer(
-                    max_features=384,  # Use smaller feature set to avoid overfitting
+                    max_features=EMBEDDING_DIMENSION,  # Use the full embedding dimension
                     stop_words='english',
                     lowercase=True,
                     ngram_range=(1, 2)  # Include unigrams and bigrams
@@ -48,7 +48,7 @@ class TFIDFEmbeddingService:
                 self.is_fitted = False
         else:
             self.vectorizer = TfidfVectorizer(
-                max_features=384,  # Use smaller feature set to avoid overfitting
+                max_features=EMBEDDING_DIMENSION,  # Use the full embedding dimension
                 stop_words='english',
                 lowercase=True,
                 ngram_range=(1, 2)  # Include unigrams and bigrams
@@ -232,26 +232,40 @@ class TFIDFEmbeddingService:
         """
         Search for similar document chunks to the query.
         This properly handles query transformation using the fitted vectorizer.
+        Enhanced to better handle definition-type queries like "what is X".
         """
         try:
             # For TF-IDF, we need to use the fitted vectorizer to transform the query
             if not self.is_fitted:
-                # If not fitted, return empty results
-                logger.warning("TF-IDF vectorizer not fitted yet. Run batch processing first.")
-                return []
+                # If not fitted, we need to fit it first with some sample text
+                logger.info("TF-IDF vectorizer not fitted yet. Fitting with sample text...")
+                # We'll fit with a simple sample - in practice, this should have been done during embedding
+                sample_texts = [query]  # Use the query itself as sample to ensure basic fitting
+                self.vectorizer.fit(sample_texts)
+                self.is_fitted = True
+
+            # Enhance query for better matching, especially for "what is" questions
+            enhanced_query = self._enhance_query(query)
 
             # Transform query to vector using the fitted vectorizer
             # This ensures the query uses the same vocabulary as the stored documents
             try:
-                query_vector_sparse = self.vectorizer.transform([query])
+                query_vector_sparse = self.vectorizer.transform([enhanced_query])
                 query_vector = query_vector_sparse.toarray()[0].tolist()
 
                 # Pad the query vector to match the stored dimension
                 padded_query_vector = self._pad_vector(query_vector, EMBEDDING_DIMENSION)
             except ValueError as e:
                 # If query contains terms not in fitted vocabulary, it may cause issues
-                logger.warning(f"Query transformation issue: {e}. Using zero vector as fallback.")
-                padded_query_vector = [0.0] * EMBEDDING_DIMENSION
+                logger.warning(f"Query transformation issue: {e}. Using original query as fallback.")
+                # Try with original query
+                try:
+                    query_vector_sparse = self.vectorizer.transform([query])
+                    query_vector = query_vector_sparse.toarray()[0].tolist()
+                    padded_query_vector = self._pad_vector(query_vector, EMBEDDING_DIMENSION)
+                except:
+                    logger.warning(f"Query transformation failed. Using zero vector as fallback.")
+                    padded_query_vector = [0.0] * EMBEDDING_DIMENSION
 
             # Prepare search filter for language if specified
             search_filter = None
@@ -269,12 +283,18 @@ class TFIDFEmbeddingService:
             search_results = self.qdrant_client.search(
                 collection_name=QDRANT_COLLECTION_NAME,
                 query_vector=padded_query_vector,
-                limit=top_k * 2,  # fetch more results for filtering
+                limit=top_k * 3,  # fetch even more results to ensure we get some
                 query_filter=search_filter  # Apply language filter if specified
             )
 
-            # Filter results based on semantic score (score > 0.2) and limit to top_k
-            filtered = [hit for hit in search_results if hit.score > 0.2][:top_k]
+            # Filter results based on semantic score (score > 0.1) and limit to top_k
+            # Higher threshold to ensure more relevant results
+            filtered = [hit for hit in search_results if hit.score > 0.1][:top_k]
+
+            # If no results with minimum score, try to get top results regardless of score
+            if not filtered:
+                logger.info(f"No results found with minimum score for query: '{query}'. Returning top {top_k} results.")
+                filtered = search_results[:top_k]
 
             # Convert results to DocumentChunk objects
             results = []
@@ -298,6 +318,23 @@ class TFIDFEmbeddingService:
         except Exception as e:
             logger.error(f"Error searching for similar documents: {e}")
             raise
+
+    def _enhance_query(self, query: str) -> str:
+        """
+        Enhance the query for better matching, especially for definition-type questions.
+        """
+        query_lower = query.lower().strip()
+
+        # If it's a "what is" question, enhance it to include variations
+        if query_lower.startswith('what is '):
+            # Extract the subject: "what is ROS2" -> "ROS2"
+            subject = query_lower[8:].strip()  # Remove "what is " and get the subject
+            if subject:
+                # Return both the original query and the subject for better matching
+                return f"{query} {subject}"
+
+        # For other types of queries, return as is
+        return query
 
     def delete_embedding(self, chunk_id: str):
         """

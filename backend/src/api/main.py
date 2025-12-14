@@ -5,7 +5,14 @@ import logging
 import os
 from dotenv import load_dotenv
 
+<<<<<<< HEAD
 from src.api.routes import ask, selected_text, translate
+=======
+from mangum import Mangum  # IMPORTANT for Vercel
+
+# Absolute import
+from src.api.routes import ask
+>>>>>>> f4f799c (Add latest backend changes)
 
 load_dotenv()
 
@@ -34,8 +41,6 @@ app.add_middleware(
 )
 
 app.include_router(ask.router, prefix="/api", tags=["ask"])
-app.include_router(selected_text.router, prefix="/api", tags=["selected-text"])
-app.include_router(translate.router, prefix="/api", tags=["translate"])
 
 @app.get("/")
 async def root():
