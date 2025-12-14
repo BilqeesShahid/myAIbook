@@ -53,3 +53,5 @@ coverage.xml
 .git/
 ".env" 
 ".env" 
+".env" 
+".env.local" 
