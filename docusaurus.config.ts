@@ -67,6 +67,55 @@ const config: Config = {
     ],
   ],
 
+  // Make environment variables available in client-side code
+  themes: [],
+  plugins: [
+    async function myPlugin() {
+      return {
+        name: 'inject-environment-variables',
+        configureWebpack() {
+          return {
+            resolve: {
+              fallback: {
+                process: require.resolve('process/browser'),
+              },
+            },
+            plugins: [
+              new (require('webpack')).DefinePlugin({
+                'process.env.DOCUSAURUS_SUPABASE_URL': JSON.stringify(process.env.DOCUSAURUS_SUPABASE_URL),
+                'process.env.DOCUSAURUS_SUPABASE_ANON_KEY': JSON.stringify(process.env.DOCUSAURUS_SUPABASE_ANON_KEY),
+              }),
+            ],
+          };
+        },
+      };
+    },
+  ],
+
+  plugins: [
+    // Custom plugin to inject environment variables
+    async function envPlugin(context, options) {
+      return {
+        name: 'env-plugin',
+        configureWebpack(config, isServer, utils) {
+          return {
+            resolve: {
+              fallback: {
+                process: require.resolve('process/browser'),
+              },
+            },
+            plugins: [
+              new (require('webpack').DefinePlugin)({
+                'process.env.DOCUSAURUS_SUPABASE_URL': JSON.stringify(process.env.DOCUSAURUS_SUPABASE_URL),
+                'process.env.DOCUSAURUS_SUPABASE_ANON_KEY': JSON.stringify(process.env.DOCUSAURUS_SUPABASE_ANON_KEY),
+              }),
+            ],
+          };
+        },
+      };
+    },
+  ],
+
   themeConfig: {
     // Replace with your project's social card
     image: 'img/docusaurus-social-card.jpg',

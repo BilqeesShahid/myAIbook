@@ -3,12 +3,12 @@ import os
 # Configuration constants for the RAG system
 
 # Qdrant Configuration
-QDRANT_URL = os.getenv("QDRANT_URL", "https://59a61c34-39c5-4424-889d-21ebdbce5b6d.sa-east-1-0.aws.cloud.qdrant.io:6333")
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.TcJLMaUiB19eoi5ZiWVkcqn-Gadg7FxOR7ejaql5ck0")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "book_embeddings")
 
 # Google Generative AI Configuration
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyCS9Nm9G9q6ldsnw5eyQoGPthmlvoeWUyw")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # Local Embedding Configuration - Use 768 to match existing collection
 EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "768"))

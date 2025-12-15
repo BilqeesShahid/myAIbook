@@ -38,6 +38,7 @@ class RetrievalService:
     def retrieve_chunks(self, query: str, top_k: int = 5, language: Optional[str] = None) -> List[SourceChunk]:
         """
         Retrieve the most relevant chunks for a given query.
+        Enhanced to use better confidence scoring based on search results.
         """
         try:
             # Reformulate the query before searching
@@ -49,10 +50,11 @@ class RetrievalService:
             # Convert to SourceChunk objects with confidence scores
             source_chunks = []
             for chunk in similar_chunks:
-                # Calculate confidence score based on similarity
-                # For now, we'll use a simple approach; in a real system,
-                # this would be based on the distance returned by the vector search
-                confidence_score = 0.8  # Placeholder - would be calculated from distance in real implementation
+                # Calculate confidence score based on the search score from the embedding service
+                # The embedding service now returns combined scores from semantic and keyword search
+                raw_score = getattr(chunk, 'score', 0.5)  # Use the score from the search result
+                # Ensure confidence score is between 0.1 and 1.0
+                confidence_score = min(1.0, max(0.1, raw_score))
 
                 source_chunk = SourceChunk(
                     chunk_id=chunk.id,
@@ -158,6 +160,7 @@ class RetrievalService:
         """
         Re-rank chunks to prioritize those containing definition-like content.
         Also filter out non-relevant content like quiz questions.
+        Enhanced to better handle "what is X" queries by prioritizing direct definitions.
         """
         query_lower = query.lower().strip()
         # Extract the subject being defined (e.g., "what is ROS2" -> "ROS2")
@@ -193,21 +196,64 @@ class RetrievalService:
 
                     # Boost score if content contains definition patterns
                     if ' is a ' in content_lower or ' is an ' in content_lower:
-                        score += 10  # Strong definition pattern
+                        score += 15  # Strong definition pattern
                     elif ' is ' in content_lower and len(content_lower.split()) < 100:  # Short definition
-                        score += 5
-                    elif 'definition' in content_lower:
                         score += 8
+                    elif 'definition' in content_lower:
+                        score += 12
                     elif 'means' in content_lower or 'stands for' in content_lower:
-                        score += 7
+                        score += 10
+                    elif 'refers to' in content_lower:
+                        score += 10
 
-                    # Boost if the subject being defined appears in the content
-                    if subject and subject in content_lower:
-                        score += 3
+                    # For "what is X" queries, especially prioritize content that directly defines the subject
+                    if subject:
+                        # Check if content contains the subject as the main topic
+                        words = content_lower.split()
+
+                        # If the content starts with the subject followed by a definition pattern (like "ROS2 (Robot Operating System) is...")
+                        if content_lower.startswith(subject.lower()) and (' is ' in content_lower or ' refers to ' in content_lower):
+                            score += 40  # Highest boost for direct definitions that start with the subject
+                        # If the content has the subject in the first few words followed by definition patterns
+                        elif len(words) >= 2 and subject.lower() in ' '.join(words[:3]) and (' is ' in content_lower or ' refers to ' in content_lower):
+                            # For content like "Chapter 1: Introduction to ROS2 What is ROS2. ROS2 (Robot Operating System 2) is a flexible framework..."
+                            # The subject "ROS2" appears early and it's a definition
+                            score += 35  # Very high boost
+                        elif subject in content_lower:
+                            score += 5
+
+                        # Extra boost if the content is specifically about the subject (not just mentions it)
+                        # For example, if query is "What is ROS2?" and content has "ROS2 (Robot Operating System 2) is a flexible framework..."
+                        # This pattern should get high priority
+                        if '(' in content_lower and ')' in content_lower and ' is ' in content_lower:
+                            # Check if subject appears before the first '(' or in close proximity to definition pattern
+                            before_paren = content_lower.split('(')[0]
+                            after_paren = content_lower.split(')')[1] if ')' in content_lower else ""
+
+                            # If subject appears in the part before parentheses that's followed by definition
+                            if subject.lower() in before_paren:
+                                score += 30  # High boost for definition format like "ROS2 (Operating System) is..."
+                            elif subject.lower() in (before_paren + after_paren)[:200]:  # Check in vicinity of definition
+                                score += 20  # Good boost for content near definition
+
+                        # Additional check for exact definition format
+                        # Look for pattern like "ROS2 (Robot Operating System 2) is a flexible framework"
+                        import re
+                        # Check for the pattern "SUBJECT (DESCRIPTION) is DEFINITION"
+                        pattern = rf"{re.escape(subject)}\s*\([^)]+\)\s+is\s+"
+                        if re.search(pattern, content, re.IGNORECASE):
+                            score += 35  # Very high boost for exact definition pattern
 
                     # Boost if section title matches the query subject
                     if subject and subject in chunk.section_title.lower():
-                        score += 2
+                        score += 7
+
+                    # If the original confidence score from embedding service was high, preserve that
+                    # but allow re-ranking based on definition quality
+                    original_confidence = getattr(chunk, 'confidence_score', 0.5)
+                    # Convert original confidence to a score component (0-10 scale)
+                    confidence_component = original_confidence * 10
+                    score += confidence_component * 0.5  # Add 50% of the original confidence as a base score
 
                     scored_chunks.append((chunk, score))
 

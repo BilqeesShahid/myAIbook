@@ -3,18 +3,246 @@ import logging
 import os
 import uuid
 import requests
+import re
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
 from ..models.query import QueryRequest, SourceChunk
 from ..services.retrieval_service import retrieval_service
 from ..services.chat_service import chat_service
+from ..utils.constants import QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION_NAME
 
 logger = logging.getLogger(__name__)
+
+
+def find_direct_answer(query: str) -> str:
+    """
+    Direct approach to find answers for various query types:
+    - "What is X?" -> finds formal definitions
+    - "What are X?" -> finds plural definitions
+    - "Who is X?" -> finds person descriptions
+    - "Why X?" -> finds explanation content
+    - "How X?" -> finds procedural content
+    """
+    # Connect to Qdrant
+    client = QdrantClient(
+        url=QDRANT_URL,
+        api_key=QDRANT_API_KEY
+    )
+
+    query_lower = query.lower().strip()
+
+    # Parse query type and subject
+    subject = None
+    query_type = None
+
+    if query_lower.startswith('what is '):
+        subject = query_lower[8:].replace('?', '').strip()
+        query_type = 'definition'
+    elif query_lower.startswith('what are '):
+        subject = query_lower[9:].replace('?', '').strip()
+        query_type = 'plural_definition'
+    elif query_lower.startswith('who is '):
+        subject = query_lower[7:].replace('?', '').strip()
+        query_type = 'person'
+    elif query_lower.startswith('why '):
+        subject = query_lower[4:].replace('?', '').strip()
+        query_type = 'explanation'
+    elif query_lower.startswith('how '):
+        subject = query_lower[4:].replace('?', '').strip()
+        query_type = 'procedure'
+    else:
+        return None  # Not a supported query type for direct search
+
+    # Scroll through all records
+    all_results = client.scroll(
+        collection_name=QDRANT_COLLECTION_NAME,
+        limit=1000,
+        with_payload=True,
+        with_vectors=False
+    )
+
+    records, _ = all_results if isinstance(all_results, tuple) else (all_results, None)
+
+    if query_type == 'definition':
+        # For "What is X?" - same as before, prioritize formal definitions
+        return _find_definition_for_subject(subject, records)
+
+    elif query_type == 'plural_definition':
+        # For "What are X?" - look for plural definitions
+        return _find_plural_definition_for_subject(subject, records)
+
+    elif query_type == 'person':
+        # For "Who is X?" - look for person descriptions
+        return _find_person_description_for_subject(subject, records)
+
+    elif query_type == 'explanation':
+        # For "Why X?" - look for explanation content
+        return _find_explanation_for_subject(subject, records)
+
+    elif query_type == 'procedure':
+        # For "How X?" - look for procedural content
+        return _find_procedure_for_subject(subject, records)
+
+    return None
+
+def _find_definition_for_subject(subject, records):
+    """Find formal definitions like 'X (description) is ...'"""
+    # Priority 1: Content from chapter 1 that contains the formal definition
+    for record in records:
+        content = record.payload.get("content", "")
+        source_path = record.payload.get('source_file_path', 'Unknown')
+        content_lower = content.lower()
+
+        # Check if it's from chapter 1 AND contains the definition pattern
+        if 'chapter1.md' in source_path.lower():
+            pattern = rf"\b{re.escape(subject)}\s*\([^)]+\)\s+is\s+"
+            if re.search(pattern, content, re.IGNORECASE):
+                return content
+
+    # Priority 2: Exact definition pattern at the beginning of content (non-chapter1)
+    for record in records:
+        content = record.payload.get("content", "")
+        source_path = record.payload.get('source_file_path', 'Unknown')
+        content_lower = content.lower()
+
+        # Skip chapter 1 here since we handled it in priority 1
+        if 'chapter1.md' in source_path.lower():
+            continue
+
+        # Look for the exact definition pattern: "SUBJECT (Description) is ..." at the start
+        pattern = rf"\b{re.escape(subject)}\s*\([^)]+\)\s+is\s+"
+        if re.search(pattern, content, re.IGNORECASE):
+            # Check if the definition appears early in the content
+            match_pos = re.search(pattern, content, re.IGNORECASE).start()
+            # If it appears in the first half of the content, it's likely the main definition
+            if match_pos < len(content) / 2:
+                return content
+
+    # Priority 3: Content that starts with or early mentions the subject in a definition context
+    for record in records:
+        content = record.payload.get("content", "")
+        source_path = record.payload.get('source_file_path', 'Unknown')
+        content_lower = content.lower()
+
+        # Skip chapter 1 here since we handled it in priority 1
+        if 'chapter1.md' in source_path.lower():
+            continue
+
+        # Check if the content starts with the subject followed by definition
+        words = content.split()
+        if len(words) >= 2 and words[0].lower().startswith(subject.lower()) and ('is' in content_lower):
+            return content
+
+        # Check if subject appears early and is in definition format
+        early_content = ' '.join(words[:15]) if len(words) > 15 else content
+        if subject.lower() in early_content.lower() and ('is a' in content_lower or 'is an' in content_lower or 'is the' in content_lower):
+            # Extra check: make sure it's defining the subject, not just mentioning it
+            if content_lower.count(subject.lower()) >= 2 or f'{subject} (' in content_lower:
+                return content
+
+    # Priority 4: Any content with the formal definition pattern - but prioritize chapter 1 content
+    chapter1_result = None
+    other_result = None
+
+    for record in records:
+        content = record.payload.get("content", "")
+        source_path = record.payload.get('source_file_path', 'Unknown')
+        content_lower = content.lower()
+
+        # Look for definition pattern anywhere in content
+        pattern = rf"\b{re.escape(subject)}\s*\([^)]+\)\s+is\s+"
+        if re.search(pattern, content, re.IGNORECASE):
+            result = content
+
+            # Prioritize chapter 1 content
+            if 'chapter1.md' in source_path.lower():
+                chapter1_result = result
+            else:
+                if other_result is None:
+                    other_result = result
+
+    # Return chapter 1 result if found, otherwise other result
+    return chapter1_result or other_result
+
+def _find_plural_definition_for_subject(subject, records):
+    """Find plural definitions like 'X (descriptions) are ...'"""
+    for record in records:
+        content = record.payload.get("content", "")
+        content_lower = content.lower()
+
+        # Look for plural definition patterns
+        pattern = rf"\b{re.escape(subject)}\s*\([^)]+\)\s+are\s+"
+        if re.search(pattern, content, re.IGNORECASE):
+            return content
+
+        # Look for plural context like "X are defined as" or "X are the"
+        if subject.lower() in content_lower and ('are ' in content_lower and ('defined as' in content_lower or 'the ' in content_lower)):
+            return content
+
+    return None
+
+def _find_person_description_for_subject(subject, records):
+    """Find descriptions about people/roles"""
+    for record in records:
+        content = record.payload.get("content", "")
+        content_lower = content.lower()
+
+        # Look for person descriptions
+        if subject.lower() in content_lower and any(word in content_lower for word in ['developer', 'engineer', 'researcher', 'scientist', 'team', 'person', 'role', 'position']):
+            return content
+
+        # Look for "X is a Y" patterns where Y is a role
+        pattern = rf"\b{re.escape(subject)}\s+is\s+(a|an)\s+(engineer|developer|researcher|scientist|expert|professional|team|member|person)"
+        if re.search(pattern, content, re.IGNORECASE):
+            return content
+
+    return None
+
+def _find_explanation_for_subject(subject, records):
+    """Find explanation content for 'why' questions"""
+    for record in records:
+        content = record.payload.get("content", "")
+        content_lower = content.lower()
+
+        # Look for explanation keywords
+        explanation_keywords = ['because', 'due to', 'reason', 'caused by', 'results from', 'explanation', 'reasons include', 'explained by']
+        if subject.lower() in content_lower and any(keyword in content_lower for keyword in explanation_keywords):
+            return content
+
+        # Look for cause and effect patterns
+        if subject.lower() in content_lower and ('because' in content_lower or 'reason' in content_lower):
+            return content
+
+    return None
+
+def _find_procedure_for_subject(subject, records):
+    """Find procedural content for 'how' questions"""
+    for record in records:
+        content = record.payload.get("content", "")
+        content_lower = content.lower()
+
+        # Look for procedural keywords
+        procedure_keywords = ['first', 'second', 'next', 'then', 'finally', 'steps', 'process', 'method', 'approach', 'way', 'procedure', 'how to', 'instructions']
+        if subject.lower() in content_lower and any(keyword in content_lower for keyword in procedure_keywords):
+            return content
+
+        # Look for step-by-step patterns
+        if subject.lower() in content_lower and ('first,' in content_lower or '1.' in content_lower or 'step' in content_lower):
+            return content
+
+    return None
 
 
 def summarize_answer(query: str, chunks: List[SourceChunk], retrieval_service) -> str:
     """
     Summarize the answer based on the query and retrieved chunks.
     Generic function that works across all book content using comprehensive semantic relevance.
+    Enhanced to use direct definition search for "what is" queries.
     """
+    # For specific query types, try to find direct answers first
+    direct_answer = find_direct_answer(query)
+    if direct_answer:
+        return f"Based on the book content: {direct_answer}"
     # Get content from all chunks and filter out non-relevant content
     valid_contents = []
     for chunk in chunks:
@@ -43,7 +271,26 @@ def summarize_answer(query: str, chunks: List[SourceChunk], retrieval_service) -
         # Calculate comprehensive relevance score
         score = 0
 
-        # 1. Term overlap with emphasis on exact matches
+        # 1. Use the confidence score from the retrieval as a base
+        # The retrieval service now returns scores based on both semantic and keyword matching
+        base_confidence = getattr(chunk, 'confidence_score', 0.5)  # Get the confidence score from the chunk
+        score = base_confidence * 50  # Scale it to contribute significantly to the total score
+
+        # 2. For definition queries like "what is X", give extra weight to direct definitions
+        if 'what is' in query_lower or query_lower.startswith('what is '):
+            # Extract the subject being defined
+            subject = ""
+            if query_lower.startswith('what is '):
+                subject = query_lower[8:].strip()
+
+            if subject:
+                # If content starts with the subject and contains definition patterns, give high score
+                if content_lower.startswith(subject.lower()) and (' is ' in content_lower or ' refers to ' in content_lower):
+                    score += 30  # Very high boost for direct definitions
+                elif subject in content_lower:
+                    score += 10  # Boost for content containing the subject
+
+        # 3. Term overlap with emphasis on exact matches
         common_words = query_words.intersection(content_words)
         if common_words:
             # Weight rare/common words differently - common words get lower weight
@@ -51,14 +298,14 @@ def summarize_answer(query: str, chunks: List[SourceChunk], retrieval_service) -
                 # Boost for longer/more specific query terms
                 score += max(1, len(word) - 2)
 
-        # 2. Phrase matching - look for exact query phrases in content
+        # 4. Phrase matching - look for exact query phrases in content
         for phrase in [query_lower] + query_lower.split():
             if len(phrase) > 3:  # Only consider meaningful phrases
                 phrase_matches = content_lower.count(phrase)
                 if phrase_matches > 0:
                     score += phrase_matches * len(phrase)  # Longer phrases get higher weight
 
-        # 3. Semantic pattern matching for different query types
+        # 5. Semantic pattern matching for different query types
         if 'what is' in query_lower or query_lower.startswith('what is '):
             # Prioritize definition patterns for "what is" questions
             definition_patterns = [' is a ', ' is an ', ' refers to ', ' means ', ' stands for ',
@@ -82,7 +329,7 @@ def summarize_answer(query: str, chunks: List[SourceChunk], retrieval_service) -
                 if pattern in content_lower:
                     score += 10
 
-        # 4. Content quality metrics
+        # 6. Content quality metrics
         sentences = content.count('.')
         words = len(content.split())
 
@@ -92,7 +339,7 @@ def summarize_answer(query: str, chunks: List[SourceChunk], retrieval_service) -
         elif 20 <= words < 50:  # Short but complete content
             score += 3
 
-        # 5. Subject relevance - check if main subject appears multiple times
+        # 7. Subject relevance - check if main subject appears multiple times
         if len(query_words) > 0:
             main_subject = list(query_words)[0] if query_words else ""
             if main_subject and len(main_subject) > 3:  # Only consider meaningful subjects
@@ -100,7 +347,7 @@ def summarize_answer(query: str, chunks: List[SourceChunk], retrieval_service) -
                 if subject_frequency > 0:
                     score += subject_frequency * 3  # Boost based on subject relevance
 
-        # 6. Chapter-topic relevance
+        # 8. Chapter-topic relevance
         chunk_title_lower = chunk.section_title.lower()
         if any(topic in query_lower for topic in ['ros2', 'simulation', 'isaac', 'vla']) and \
            any(topic in chunk_title_lower for topic in ['ros2', 'simulation', 'isaac', 'vla']):
@@ -111,7 +358,44 @@ def summarize_answer(query: str, chunks: List[SourceChunk], retrieval_service) -
     # Sort by relevance score (highest first)
     scored_results.sort(key=lambda x: x[2], reverse=True)
 
-    # Return the most relevant content
+    # For "what is" queries, try to find the most direct definition
+    query_lower = query.lower().strip()
+    if query_lower.startswith('what is '):
+        subject = query_lower[8:].strip()
+        if subject:
+            # Look for the chunk that most directly defines the subject
+            for chunk, content, score in scored_results:
+                content_lower = content.lower()
+                # Check if this content directly defines the subject we're looking for
+                # Prioritize content like "ROS2 (Robot Operating System 2) is a flexible framework" over
+                # "What is Isaac ROS. Isaac ROS is a collection of ROS2 packages"
+
+                # More sophisticated check for direct definition
+                # Look for the pattern where the subject is defined, not just mentioned
+                import re
+
+                # Check if the content contains the subject in a definition format like "SUBJECT (description) is ..."
+                # This would match "ROS2 (Robot Operating System 2) is a flexible framework"
+                definition_pattern = rf"\b{re.escape(subject.lower())}\s*\([^)]+\)\s+is\s+"
+                if re.search(definition_pattern, content_lower):
+                    return f"Based on the book content: {content.strip()}"
+
+                # Also check if the content starts with subject followed by definition
+                words = content_lower.split()
+                if len(words) >= 2 and words[0] == subject.lower() and (' is ' in content_lower or ' refers to ' in content_lower):
+                    return f"Based on the book content: {content.strip()}"
+
+                # Check if subject appears early in content and is part of a definition
+                early_content = ' '.join(words[:10]) if len(words) > 10 else content_lower
+                if subject.lower() in early_content and (' is ' in content_lower or ' refers to ' in content_lower):
+                    # Additional check: make sure the definition is about the subject, not just mentioning it
+                    # For "What is Isaac ROS...", the subject "ROS2" appears but it's defining "Isaac ROS", not "ROS2"
+                    # For "Chapter 1: Introduction to ROS2 What is ROS2. ROS2 (Robot Operating System 2)...",
+                    # the definition is clearly about ROS2
+                    if subject.lower() in content_lower.split('.')[0][:100]:  # Check in first sentence/portion
+                        return f"Based on the book content: {content.strip()}"
+
+    # Return the most relevant content based on scoring
     if scored_results:
         _, best_content, best_score = scored_results[0]
         if best_score > 0:
